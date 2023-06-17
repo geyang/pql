@@ -1,23 +1,40 @@
+from copy import deepcopy
 from itertools import count
-import isaacgym
+
 import hydra
-import wandb
+# import wandb
 from omegaconf import DictConfig
 
 import pql
 from pql.algo import alg_name_to_path
 from pql.replay.simple_replay import ReplayBuffer
-from pql.utils.common import init_wandb
-from pql.utils.common import load_class_from_path
-from pql.utils.common import set_random_seed
+# from pql.utils.common import init_wandb
+from pql.utils.common import load_class_from_path, set_random_seed, preprocess_cfg, capture_keyboard_interrupt
 from pql.utils.evaluator import Evaluator
 from pql.utils.isaacgym_util import create_task_env
-from pql.utils.common import preprocess_cfg
-from pql.utils.common import capture_keyboard_interrupt
 from pql.utils.model_util import load_model
+
 
 @hydra.main(config_path=pql.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
 def main(cfg: DictConfig):
+    from ml_logger import logger
+
+    print("Dashboard:", logger.get_dash_url())
+    logger.log_text("""
+    charts:
+    - yKey: "train/critic_loss"
+      xKey: step
+    - yKey: "train/actor_loss"
+      xKey: step
+    - yKey: "train/return"
+      xKey: step
+    """, ".charts.yml", True, True)
+    a = deepcopy(cfg)
+    env = a.pop('env')
+    algo = a.pop('algo')
+    a.pop('logging')
+    logger.log_params(env=env, algo=algo, config=cfg)
+
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
     preprocess_cfg(cfg)
@@ -29,7 +46,7 @@ def main(cfg: DictConfig):
         algo_name = 'Agent' + algo_name
     agent_class = load_class_from_path(algo_name, alg_name_to_path[algo_name])
     agent = agent_class(env=env, cfg=cfg)
-    
+
     if cfg.artifact is not None:
         load_model(agent.actor, "actor", cfg)
         load_model(agent.critic, "critic", cfg)
@@ -62,10 +79,10 @@ def main(cfg: DictConfig):
 
         if evaluator.parent.poll():
             ret_mean, step_mean = evaluator.parent.recv()
-            wandb.log({'eval/return': ret_mean, 'eval/episode_length': step_mean})
+            logger.log(**{'eval/return': ret_mean, 'eval/episode_length': step_mean}, flush=True)
         if iter_t % cfg.algo.log_freq == 0:
             log_info['global_steps'] = global_steps
-            wandb.log(log_info, step=global_steps)
+            logger.log(**log_info, step=global_steps, flush=True)
         if iter_t % cfg.algo.eval_freq == 0:
             evaluator.eval_policy(agent.actor, agent.critic, normalizer=agent.obs_rms,
                                   step=global_steps)

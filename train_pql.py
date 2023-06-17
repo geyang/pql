@@ -1,36 +1,48 @@
+import isaacgym
+
+assert isaacgym
+
 import time
+from collections import deque
 from copy import deepcopy
 from itertools import count
 
-import isaacgym
-import pql
 import hydra
 import ray
 import torch
-import wandb
-from collections import deque
 from omegaconf import DictConfig
+
+import pql
 # from loguru import logger
 from pql.algo.pql_actor import PQLActor
-from pql.algo.pql_p_learner import PQLPLearner
-from pql.algo.pql_p_learner import asyn_p_learner
-from pql.algo.pql_v_learner import PQLVLearner
-from pql.algo.pql_v_learner import asyn_v_learner
-from pql.utils.common import init_wandb
-from pql.utils.common import set_random_seed
+from pql.algo.pql_p_learner import PQLPLearner, asyn_p_learner
+from pql.algo.pql_v_learner import PQLVLearner, asyn_v_learner
+from pql.utils.common import set_random_seed, capture_keyboard_interrupt, preprocess_cfg
 from pql.utils.evaluator import Evaluator
 from pql.utils.isaacgym_util import create_task_env
-from pql.utils.common import capture_keyboard_interrupt
-from pql.utils.common import preprocess_cfg
 
 
 @hydra.main(config_path=pql.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
 def main(cfg: DictConfig):
     from ml_logger import logger
 
-    ray.init(num_gpus=cfg.algo.num_gpus,
-             num_cpus=cfg.algo.num_cpus,
-             include_dashboard=False)
+    print("Dashboard:", logger.get_dash_url())
+    logger.log_text("""
+    charts:
+    - yKey: "train/critic_loss"
+      xKey: step
+    - yKey: "train/actor_loss"
+      xKey: step
+    - yKey: "train/return"
+      xKey: step
+    """, ".charts.yml", True, True)
+    a = deepcopy(cfg)
+    env = a.pop('env')
+    algo = a.pop('algo')
+    a.pop('logging')
+    logger.log_params(env=env, algo=algo, config=cfg)
+
+    ray.init(num_gpus=cfg.algo.num_gpus, num_cpus=cfg.algo.num_cpus, include_dashboard=False)
 
     preprocess_cfg(cfg)
     capture_keyboard_interrupt()
@@ -43,10 +55,8 @@ def main(cfg: DictConfig):
     p_learner_device = torch.device(f"cuda:{cfg.algo.p_learner_gpu}")
 
     pql_actor = PQLActor(env, cfg)
-    pql_v_learner = PQLVLearner.remote(env.observation_space.shape,
-                                       env.action_space.shape[0], cfg)
-    pql_p_learner = PQLPLearner.remote(env.observation_space.shape,
-                                       env.action_space.shape[0], cfg)
+    pql_v_learner = PQLVLearner.remote(env.observation_space.shape, env.action_space.shape[0], cfg)
+    pql_p_learner = PQLPLearner.remote(env.observation_space.shape, env.action_space.shape[0], cfg)
     critic, critic_update_times, critic_loss = ray.get(pql_v_learner.start.remote())
     actor, actor_update_times, actor_loss = ray.get(pql_p_learner.start.remote())
     pql_actor.actor = deepcopy(actor).to(sim_device)
@@ -56,17 +66,14 @@ def main(cfg: DictConfig):
     evaluator = Evaluator(cfg=cfg, wandb_run=None)
 
     pql_actor.reset_agent()
+    logger.print('Warm up the replay buffer', color='green')
     p_data, v_data, steps = pql_actor.explore_env(env, cfg.algo.warm_up, random=True)
     global_steps += steps
 
-    old_cri_id = pql_v_learner.update.remote(actor.to(v_learner_device),
-                                             v_data,
-                                             pql_actor.obs_rms.get_states(v_learner_device),
-                                             0)
-    old_act_id = pql_p_learner.update.remote(critic.to(p_learner_device),
-                                             p_data,
-                                             pql_actor.obs_rms.get_states(p_learner_device),
-                                             0)
+    old_cri_id = pql_v_learner.update.remote(
+        actor.to(v_learner_device), v_data, pql_actor.obs_rms.get_states(v_learner_device), 0)
+    old_act_id = pql_p_learner.update.remote(
+        critic.to(p_learner_device), p_data, pql_actor.obs_rms.get_states(p_learner_device), 0)
     asyn_v_learner.remote(pql_v_learner, cfg)
     asyn_p_learner.remote(pql_p_learner, cfg)
 
@@ -87,11 +94,11 @@ def main(cfg: DictConfig):
                     'actor_wait_time': actor_wait_time})
 
     logger.print(f"{'Steps':>12s}"
-                f"{'Time':>12s}"
-                f"{'critic_loss':>12s}"
-                f"{'actor_loss':>12s}"
-                f"{'v-updates':>12s}"
-                f"{'p-updates':>12s}", color="cyan")
+                 f"{'Time':>12s}"
+                 f"{'critic_loss':>12s}"
+                 f"{'actor_loss':>12s}"
+                 f"{'v-updates':>12s}"
+                 f"{'p-updates':>12s}", color="cyan")
 
     for iter_t in count():
         p_data, v_data, steps = pql_actor.explore_env(env, cfg.algo.horizon_len, random=False)
@@ -109,15 +116,11 @@ def main(cfg: DictConfig):
             old_act_id = None
             pql_actor.actor = deepcopy(actor).to(sim_device)
 
-        cri_id = pql_v_learner.update.remote(actor.to(v_learner_device),
-                                             v_data,
-                                             pql_actor.obs_rms.get_states(v_learner_device),
-                                             critic_wait_time)
+        cri_id = pql_v_learner.update.remote(
+            actor.to(v_learner_device), v_data, pql_actor.obs_rms.get_states(v_learner_device), critic_wait_time)
 
-        act_id = pql_p_learner.update.remote(critic.to(p_learner_device),
-                                             p_data,
-                                             pql_actor.obs_rms.get_states(p_learner_device),
-                                             actor_wait_time)
+        act_id = pql_p_learner.update.remote(
+            critic.to(p_learner_device), p_data, pql_actor.obs_rms.get_states(p_learner_device), actor_wait_time)
 
         if old_cri_id is None:
             old_cri_id = cri_id
@@ -178,11 +181,11 @@ def main(cfg: DictConfig):
             # wandb.log(log_info, step=global_steps)
         if iter_t % cfg.algo.eval_freq == 0:
             logger.print(f"{global_steps:12.2e}"
-                        f"{time.time() - evaluator.start_time:>12.1f}"
-                        f"{log_info['train/critic_loss']:12.2f}"
-                        f"{log_info['train/actor_loss']:12.2f}"
-                        f"{log_info['train/critic_update_times']:12.2f}"
-                        f"{log_info['train/actor_update_times']:12.2f}", color="cyan")
+                         f"{time.time() - evaluator.start_time:>12.1f}"
+                         f"{log_info['train/critic_loss']:12.2f}"
+                         f"{log_info['train/actor_loss']:12.2f}"
+                         f"{log_info['train/critic_update_times']:12.2f}"
+                         f"{log_info['train/actor_update_times']:12.2f}", color="cyan")
             evaluator.eval_policy(pql_actor.actor, critic, normalizer=pql_actor.obs_rms,
                                   step=global_steps)
 

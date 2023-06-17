@@ -19,6 +19,7 @@ def init_wandb(cfg):
     wandb_cfg['hostname'] = platform.node()
     wandb_kwargs = cfg.logging.wandb
     wandb_tags = wandb_kwargs.get('tags', None)
+
     if wandb_tags is not None and isinstance(wandb_tags, str):
         wandb_kwargs['tags'] = [wandb_tags]
     if cfg.artifact is not None:
@@ -26,6 +27,7 @@ def init_wandb(cfg):
         wandb_run = wandb.init(**wandb_kwargs, config=wandb_cfg, id=wandb_id, resume="must")
     else:
         wandb_run = wandb.init(**wandb_kwargs, config=wandb_cfg)
+
     from ml_logger import logger
 
     logger.print(f'Wandb run dir:{wandb_run.dir}')
