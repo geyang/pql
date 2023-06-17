@@ -98,7 +98,9 @@ class PQLPLearner:
 
 @ray.remote(num_gpus=0.3)
 def asyn_p_learner(p_learner, cfg):
-    logger.warning(f"P-Learner starts running asynchronously on GPU {cfg.algo.p_learner_gpu}")
+    from ml_logger import logger
+
+    logger.print(f"P-Learner starts running asynchronously on GPU {cfg.algo.p_learner_gpu}", color="red")
     while True:
         sleep_time = ray.get(p_learner.learn.remote())
         time.sleep(sleep_time)

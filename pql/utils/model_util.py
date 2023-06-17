@@ -7,18 +7,19 @@ from pql.utils.common import load_class_from_path
 
 
 def load_model(model, model_type, cfg):
+    from ml_logger import logger
     artifact = wandb.Api().artifact(cfg.artifact)
     artifact.download(pql.LIB_PATH)
-    logger.warning(f'Load {model_type}')
+    logger.print(f'Load {model_type}', color="red")
     weights = torch.load(Path(pql.LIB_PATH, "model.pth"))
 
     if model_type in ["actor", "critic", "obs_rms"]:
         if model_type == "obs_rms" and weights[model_type] is None:
-            logger.warning(f'Observation normalization is enabled, but loaded weight contains no normalization info.')
+            logger.print(f'Observation normalization is enabled, but loaded weight contains no normalization info.', color="red")
             return
         model.load_state_dict(weights[model_type])
     else:
-        logger.warning(f'Invalid model type:{model_type}')
+        logger.print(f'Invalid model type:{model_type}', color='red')
 
 
 def save_model(path, actor, critic, rms, wandb_run, ret_max):

@@ -77,13 +77,13 @@ Isaac Gym requires an NVIDIA GPU. To train in the default configuration, we reco
 
 Run :zap: PQL on Shadow Hand task. A full list of tasks in Isaac Gym is available [here](https://github.com/NVIDIA-Omniverse/IsaacGymEnvs/blob/main/docs/rl_examples.md).
 
-```bash
+```
 python train_pql.py task=ShadowHand
 ```
 
 Run :zap: PQL-D (with distributional RL)
 
-```bash
+```
 python train_pql.py task=ShadowHand algo.distl=True algo.cri_class=DistributionalDoubleQ
 ```
 
@@ -91,19 +91,19 @@ python train_pql.py task=ShadowHand algo.distl=True algo.cri_class=Distributiona
 
 Run DDPG baseline
 
-```bash
+```
 python train_baselines.py algo=ddpg_algo task=ShadowHand
 ```
 
 Run SAC baseline
 
-```bash
+```
 python train_baselines.py algo=sac_algo task=ShadowHand
 ```
 
 Run PPO baseline
 
-```bash
+```
 python train_baselines.py algo=ppo_algo task=ShadowHand isaac_param=True
 ```
 

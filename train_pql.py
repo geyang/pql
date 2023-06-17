@@ -10,7 +10,7 @@ import torch
 import wandb
 from collections import deque
 from omegaconf import DictConfig
-from loguru import logger
+# from loguru import logger
 from pql.algo.pql_actor import PQLActor
 from pql.algo.pql_p_learner import PQLPLearner
 from pql.algo.pql_p_learner import asyn_p_learner
@@ -26,13 +26,16 @@ from pql.utils.common import preprocess_cfg
 
 @hydra.main(config_path=pql.LIB_PATH.joinpath('cfg').as_posix(), config_name="default")
 def main(cfg: DictConfig):
+    from ml_logger import logger
+
     ray.init(num_gpus=cfg.algo.num_gpus,
              num_cpus=cfg.algo.num_cpus,
              include_dashboard=False)
+
     preprocess_cfg(cfg)
     capture_keyboard_interrupt()
     set_random_seed(cfg.seed)
-    wandb_run = init_wandb(cfg)
+    # wandb_run = init_wandb(cfg)
     env = create_task_env(cfg)
 
     sim_device = torch.device(f"{cfg.sim_device}")
@@ -49,7 +52,8 @@ def main(cfg: DictConfig):
     pql_actor.actor = deepcopy(actor).to(sim_device)
 
     global_steps = 0
-    evaluator = Evaluator(cfg=cfg, wandb_run=wandb_run)
+    # evaluator = Evaluator(cfg=cfg, wandb_run=wandb_run)
+    evaluator = Evaluator(cfg=cfg, wandb_run=None)
 
     pql_actor.reset_agent()
     p_data, v_data, steps = pql_actor.explore_env(env, cfg.algo.warm_up, random=True)
@@ -82,12 +86,12 @@ def main(cfg: DictConfig):
                     'critic_wait_time': critic_wait_time,
                     'actor_wait_time': actor_wait_time})
 
-    logger.info(f"{'Steps':>12s}"
+    logger.print(f"{'Steps':>12s}"
                 f"{'Time':>12s}"
                 f"{'critic_loss':>12s}"
                 f"{'actor_loss':>12s}"
                 f"{'v-updates':>12s}"
-                f"{'p-updates':>12s}")
+                f"{'p-updates':>12s}", color="cyan")
 
     for iter_t in count():
         p_data, v_data, steps = pql_actor.explore_env(env, cfg.algo.horizon_len, random=False)
@@ -166,16 +170,19 @@ def main(cfg: DictConfig):
 
         if evaluator.parent.poll():
             ret_mean, step_mean = evaluator.parent.recv()
-            wandb.log({'eval/return': ret_mean, 'eval/episode_length': step_mean})
+            # note: switch to store_metrics soon.
+            logger.store_metrics(**{'eval/return': ret_mean, 'eval/episode_length': step_mean})
         if iter_t % cfg.algo.log_freq == 0:
-            wandb.log(log_info, step=global_steps)
+            # note: consider switching to store_metrics soon.
+            logger.log(**log_info, step=global_steps, flush=True)
+            # wandb.log(log_info, step=global_steps)
         if iter_t % cfg.algo.eval_freq == 0:
-            logger.info(f"{global_steps:12.2e}"
+            logger.print(f"{global_steps:12.2e}"
                         f"{time.time() - evaluator.start_time:>12.1f}"
                         f"{log_info['train/critic_loss']:12.2f}"
                         f"{log_info['train/actor_loss']:12.2f}"
                         f"{log_info['train/critic_update_times']:12.2f}"
-                        f"{log_info['train/actor_update_times']:12.2f}")
+                        f"{log_info['train/actor_update_times']:12.2f}", color="cyan")
             evaluator.eval_policy(pql_actor.actor, critic, normalizer=pql_actor.obs_rms,
                                   step=global_steps)
 

@@ -9,7 +9,7 @@ import gym
 import numpy as np
 import torch
 import wandb
-from loguru import logger
+# from loguru import logger
 from omegaconf import OmegaConf, open_dict
 
 
@@ -26,8 +26,10 @@ def init_wandb(cfg):
         wandb_run = wandb.init(**wandb_kwargs, config=wandb_cfg, id=wandb_id, resume="must")
     else:
         wandb_run = wandb.init(**wandb_kwargs, config=wandb_cfg)
-    logger.warning(f'Wandb run dir:{wandb_run.dir}')
-    logger.warning(f'Project name:{wandb_run.project_name()}')
+    from ml_logger import logger
+
+    logger.print(f'Wandb run dir:{wandb_run.dir}')
+    logger.print(f'Project name:{wandb_run.project_name()}')
     return wandb_run
 
 
@@ -43,6 +45,7 @@ def load_class_from_path(cls_name, path):
 
 
 def set_random_seed(seed=None):
+    from ml_logger import logger
     if seed is None:
         max_seed_value = np.iinfo(np.uint32).max
         min_seed_value = np.iinfo(np.uint32).min
@@ -50,7 +53,7 @@ def set_random_seed(seed=None):
     np.random.seed(seed)
     torch.manual_seed(seed)
     random.seed(seed)
-    logger.info(f'Setting random seed to:{seed}')
+    logger.print(f'Setting random seed to:{seed}')
     return seed
 
 
@@ -245,6 +248,7 @@ def stack_data(data, torch_to_numpy=False, dim=0):
 
 # PPO uses different hyperparameters per task. See IsaacGymEnvs for details.
 def peprocess_PPO_cfg(cfg):
+    from ml_logger import logger
     if cfg.task.name == 'Ant':
         cfg.num_envs = 4096
         cfg.algo.batch_size = 32768
@@ -273,7 +277,7 @@ def peprocess_PPO_cfg(cfg):
         cfg.algo.horizon_len = 32
         cfg.algo.update_times = 5
     else:
-        logger.warning(f'Cannot find config for PPO on task:{cfg.task}. Using default config.')
+        logger.print(f'Cannot find config for PPO on task:{cfg.task}. Using default config.', color="red")
 
 
 # check PQL device

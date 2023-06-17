@@ -21,7 +21,7 @@ def main(cfg: DictConfig):
     set_random_seed(cfg.seed)
     capture_keyboard_interrupt()
     preprocess_cfg(cfg)
-    wandb_run = init_wandb(cfg)
+    # wandb_run = init_wandb(cfg)
     env = create_task_env(cfg)
 
     algo_name = cfg.algo.name
@@ -37,7 +37,8 @@ def main(cfg: DictConfig):
             load_model(agent.obs_rms, "obs_rms", cfg)
 
     global_steps = 0
-    evaluator = Evaluator(cfg=cfg, wandb_run=wandb_run)
+    # evaluator = Evaluator(cfg=cfg, wandb_run=wandb_run)
+    evaluator = Evaluator(cfg=cfg, wandb_run=None)
 
     agent.reset_agent()
     is_off_policy = cfg.algo.name != 'PPO'
