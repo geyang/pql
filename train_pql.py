@@ -28,6 +28,9 @@ def main(cfg: DictConfig):
 
     print("Dashboard:", logger.get_dash_url())
     logger.log_text("""
+    keys:
+    - task.name
+    - algo.name
     charts:
     - yKey: "train/critic_loss"
       xKey: step
@@ -36,11 +39,7 @@ def main(cfg: DictConfig):
     - yKey: "train/return"
       xKey: step
     """, ".charts.yml", True, True)
-    a = deepcopy(cfg)
-    env = a.pop('env')
-    algo = a.pop('algo')
-    a.pop('logging')
-    logger.log_params(env=env, algo=algo, config=cfg)
+    logger.log_params(algo=dict(name=cfg.algo.name), task=dict(name=cfg.task.name))
 
     ray.init(num_gpus=cfg.algo.num_gpus, num_cpus=cfg.algo.num_cpus, include_dashboard=False)
 
