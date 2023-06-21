@@ -142,24 +142,25 @@ def get_action_dim(action_space):
 
 
 def normalize(input, normalize_tuple):
-    if normalize_tuple is not None:
-        current_mean, current_var, epsilon = normalize_tuple
-        y = (input - current_mean.float()) / torch.sqrt(current_var.float() + epsilon)
-        y = torch.clamp(y, min=-5.0, max=5.0)
-        return y
-    return input
+    if normalize_tuple is None:
+        return input
+
+    current_mean, current_var, epsilon = normalize_tuple
+    y = (input - current_mean.float()) / torch.sqrt(current_var.float() + epsilon)
+    y = torch.clamp(y, min=-5.0, max=5.0)
+    return y
 
 
 def preprocess_cfg(cfg):
     with open_dict(cfg):
         cfg.available_gpus = torch.cuda.device_count()
-        
+
     if cfg.algo.name == 'PPO':
         if cfg.isaac_param:
             peprocess_PPO_cfg(cfg)
     elif cfg.algo.name == 'PQL':
         check_device(cfg)
-        
+
     task_name = cfg.task.name
     task_reward_scale = dict(
         AllegroHand=0.01,
@@ -292,4 +293,3 @@ def check_device(cfg):
         if gpu_id >= cfg.available_gpus:
             assert f'Invalid CUDA device {gpu_id}: id out of range'
     # need more check
-        

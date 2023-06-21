@@ -69,10 +69,11 @@ def main(cfg: DictConfig):
     p_data, v_data, steps = pql_actor.explore_env(env, cfg.algo.warm_up, random=True)
     global_steps += steps
 
-    old_cri_id = pql_v_learner.update.remote(
-        actor.to(v_learner_device), v_data, pql_actor.obs_rms.get_states(v_learner_device), 0)
-    old_act_id = pql_p_learner.update.remote(
-        critic.to(p_learner_device), p_data, pql_actor.obs_rms.get_states(p_learner_device), 0)
+    cri_rms = pql_actor.obs_rms.get_states(v_learner_device)
+    pol_rms = pql_actor.obs_rms.get_states(p_learner_device)
+
+    old_cri_id = pql_v_learner.update.remote(actor.to(v_learner_device), v_data, cri_rms, 0)
+    old_act_id = pql_p_learner.update.remote(critic.to(p_learner_device), p_data, pol_rms, 0)
     asyn_v_learner.remote(pql_v_learner, cfg)
     asyn_p_learner.remote(pql_p_learner, cfg)
 
@@ -115,11 +116,14 @@ def main(cfg: DictConfig):
             old_act_id = None
             pql_actor.actor = deepcopy(actor).to(sim_device)
 
+        cri_rms = pql_actor.obs_rms.get_states(v_learner_device)
+        pol_rms = pql_actor.obs_rms.get_states(p_learner_device)
+
         cri_id = pql_v_learner.update.remote(
-            actor.to(v_learner_device), v_data, pql_actor.obs_rms.get_states(v_learner_device), critic_wait_time)
+            actor.to(v_learner_device), v_data, cri_rms, critic_wait_time)
 
         act_id = pql_p_learner.update.remote(
-            critic.to(p_learner_device), p_data, pql_actor.obs_rms.get_states(p_learner_device), actor_wait_time)
+            critic.to(p_learner_device), p_data, pol_rms, actor_wait_time)
 
         if old_cri_id is None:
             old_cri_id = cri_id

@@ -105,8 +105,8 @@ class RunningMeanStd:
     def get_states(self, device=None):
         if device is not None:
             return self.mean.to(device), self.var.to(device), self.epsilon
-        else:
-            return self.mean, self.var, self.epsilon
+
+        return self.mean, self.var, self.epsilon
 
     def load_state_dict(self, info):
         self.mean = info[0]
