@@ -28,6 +28,6 @@ envs.reset()
 print("the image of Isaac Gym viewer is an array of shape", envs.render(mode="rgb_array").shape)
 for _ in range(100):
     act = torch.rand([20, *envs.action_space.shape], device="cuda:0")
+    envs.step(act)
 
-envs.step(act)
 print('completed')
